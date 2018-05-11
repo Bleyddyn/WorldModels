@@ -5,8 +5,6 @@ from keras.models import Model
 from keras import backend as K
 from keras.callbacks import EarlyStopping
 
-INPUT_DIM = (64,64,3)
-
 CONV_FILTERS = [32,64,64,128]
 CONV_KERNEL_SIZES = [4,4,4,4]
 CONV_STRIDES = [2,2,2,2]
@@ -26,22 +24,24 @@ BATCH_SIZE = 32
 
 def sampling(args):
     z_mean, z_log_var = args
+    z_dim = z_mean.shape[-1]
+    if z_dim != Z_DIM:
+        raise "Invalid dimensions: {} {}".format( z_dim, Z_DIM)
     epsilon = K.random_normal(shape=(K.shape(z_mean)[0], Z_DIM), mean=0.,stddev=1.)
     return z_mean + K.exp(z_log_var / 2) * epsilon
 
 class VAE():
-    def __init__(self):
+    def __init__(self, input_dim=(64,64,3), z_dim=32):
+        self.input_dim = input_dim
+        self.z_dim = z_dim
+
         self.models = self._build()
         self.model = self.models[0]
         self.encoder = self.models[1]
         self.decoder = self.models[2]
 
-        self.input_dim = INPUT_DIM
-        self.z_dim = Z_DIM
-
-
     def _build(self):
-        vae_x = Input(shape=INPUT_DIM)
+        vae_x = Input(shape=self.input_dim)
         vae_c1 = Conv2D(filters = CONV_FILTERS[0], kernel_size = CONV_KERNEL_SIZES[0], strides = CONV_STRIDES[0], activation=CONV_ACTIVATIONS[0])(vae_x)
         vae_c2 = Conv2D(filters = CONV_FILTERS[1], kernel_size = CONV_KERNEL_SIZES[1], strides = CONV_STRIDES[1], activation=CONV_ACTIVATIONS[0])(vae_c1)
         vae_c3= Conv2D(filters = CONV_FILTERS[2], kernel_size = CONV_KERNEL_SIZES[2], strides = CONV_STRIDES[2], activation=CONV_ACTIVATIONS[0])(vae_c2)
@@ -49,11 +49,11 @@ class VAE():
 
         vae_z_in = Flatten()(vae_c4)
 
-        vae_z_mean = Dense(Z_DIM)(vae_z_in)
-        vae_z_log_var = Dense(Z_DIM)(vae_z_in)
+        vae_z_mean = Dense(self.z_dim)(vae_z_in)
+        vae_z_log_var = Dense(self.z_dim)(vae_z_in)
 
         vae_z = Lambda(sampling)([vae_z_mean, vae_z_log_var])
-        vae_z_input = Input(shape=(Z_DIM,))
+        vae_z_input = Input(shape=(self.z_dim,))
 
         # we instantiate these layers separately so as to reuse them later
         vae_dense = Dense(1024)
