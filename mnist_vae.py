@@ -1,4 +1,7 @@
 ''' Testing the WorlModels vae on mnist
+
+Example code: https://towardsdatascience.com/teaching-a-variational-autoencoder-vae-to-draw-mnist-characters-978675c95776
+  specifically how to get a 28x28 output
 '''
 from __future__ import print_function
 
@@ -14,19 +17,22 @@ from keras.datasets import mnist
 
 from vae.arch import VAE
 
-#vae = VAE(input_dim=(28,28,1))
-vae = VAE()
+input_dim = (28,28,1)
+vae = VAE(input_dim=input_dim)
+vae.model.summary()
+#vae = VAE()
 
 # train the VAE on MNIST digits
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 x_train = x_train.astype('float32') / 255.
 x_test = x_test.astype('float32') / 255.
-print( x_train.shape )
-exit()
 
-x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
-x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
+x_train = x_train.reshape(x_train.shape + (1,) )
+x_test = x_test.reshape(x_test.shape+ (1,))
+
+#x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
+#x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
 
 vae.train(x_train)
 

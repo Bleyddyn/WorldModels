@@ -7,14 +7,14 @@ from keras.callbacks import EarlyStopping
 
 CONV_FILTERS = [32,64,64,128]
 CONV_KERNEL_SIZES = [4,4,4,4]
-CONV_STRIDES = [2,2,2,2]
+CONV_STRIDES = [2,1,1,1]
 CONV_ACTIVATIONS = ['relu','relu','relu','relu']
 
 DENSE_SIZE = 1024
 
 CONV_T_FILTERS = [64,64,32,3]
 CONV_T_KERNEL_SIZES = [5,5,6,6]
-CONV_T_STRIDES = [2,2,2,2]
+CONV_T_STRIDES = [1,1,1,2]
 CONV_T_ACTIVATIONS = ['relu','relu','relu','sigmoid']
 
 Z_DIM = 32
