@@ -3,18 +3,18 @@ import numpy as np
 from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Lambda, Reshape
 from keras.models import Model
 from keras import backend as K
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping, TerminateOnNaN
 
 CONV_FILTERS = [32,64,64,128]
 CONV_KERNEL_SIZES = [4,4,4,4]
-CONV_STRIDES = [2,1,1,1]
+CONV_STRIDES = [2,2,2,2]
 CONV_ACTIVATIONS = ['relu','relu','relu','relu']
 
 DENSE_SIZE = 1024
 
 CONV_T_FILTERS = [64,64,32,3]
 CONV_T_KERNEL_SIZES = [5,5,6,6]
-CONV_T_STRIDES = [1,1,1,2]
+CONV_T_STRIDES = [2,2,2,2]
 CONV_T_ACTIVATIONS = ['relu','relu','relu','sigmoid']
 
 Z_DIM = 32
@@ -113,7 +113,7 @@ class VAE():
     def train(self, data, validation_split = 0.2):
 
         earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=5, verbose=1, mode='auto')
-        callbacks_list = [earlystop]
+        callbacks_list = [earlystop, TerminateOnNaN()]
 
         self.model.fit(data, data,
                 shuffle=True,
