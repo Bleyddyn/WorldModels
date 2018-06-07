@@ -27,8 +27,15 @@ def sampling(args):
     z_dim = z_mean.shape[-1]
     if z_dim != Z_DIM:
         raise "Invalid dimensions: {} {}".format( z_dim, Z_DIM)
-    epsilon = K.random_normal(shape=(K.shape(z_mean)[0], Z_DIM), mean=0.,stddev=1.)
-    return z_mean + K.exp(z_log_var / 2) * epsilon
+    epsilon = K.random_normal(shape=(K.shape(z_mean)[0], Z_DIM), mean=0.0,stddev=1.0)
+    return z_mean + K.exp(z_log_var / 2.0) * epsilon
+
+# See: https://github.com/Lasagne/Recipes/blob/master/examples/variational_autoencoder/variational_autoencoder.py
+# Use this as the activation for the vae_z_log_var layer
+# Tried: 10
+relu_shift = 1.0
+def shifted_relu(x):
+    return K.relu(x + relu_shift) - relu_shift
 
 class VAE():
     def __init__(self, input_dim=(64,64,3), z_dim=32):
@@ -50,7 +57,7 @@ class VAE():
         vae_z_in = Flatten()(vae_c4)
 
         vae_z_mean = Dense(self.z_dim)(vae_z_in)
-        vae_z_log_var = Dense(self.z_dim)(vae_z_in)
+        vae_z_log_var = Dense(self.z_dim, activation='relu')(vae_z_in)
 
         vae_z = Lambda(sampling)([vae_z_mean, vae_z_log_var])
         vae_z_input = Input(shape=(self.z_dim,))
@@ -94,10 +101,13 @@ class VAE():
             y_true_flat = K.flatten(y_true)
             y_pred_flat = K.flatten(y_pred)
 
-            return 10 * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
+            #return (64*64*3) * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
+            return 0.5 * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
 
         def vae_kl_loss(y_true, y_pred):
-            return - 0.5 * K.mean(1 + vae_z_log_var - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
+            x = - 0.5 * K.mean(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
+            #return K.clip(x, -1000.0, 100.0)
+            return x
 
         def vae_loss(y_true, y_pred):
             return vae_r_loss(y_true, y_pred) + vae_kl_loss(y_true, y_pred)

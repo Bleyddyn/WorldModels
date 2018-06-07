@@ -198,7 +198,8 @@ def simulate(model, train_mode=False, render_mode=True, num_episode=5, seed=-1, 
     obs = config.adjust_obs(obs)
     action = model.env.action_space.sample()
 
-    model.env.render("human")
+    if render_mode:
+        model.env.render("human")
 
     if obs is None:
       obs = np.zeros(model.input_size)
