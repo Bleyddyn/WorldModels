@@ -488,7 +488,15 @@ def mpi_fork(n):
       IN_MPI="1"
     )
     print( ["mpirun", "-np", str(n), sys.executable] + sys.argv)
-    subprocess.check_call(["mpirun", "-np", str(n), sys.executable] +['-u']+ sys.argv, env=env)
+
+    """ https://docs.python.org/3/library/subprocess.html#subprocess.Popen
+    https://bitbucket.org/pyglet/pyglet/issues/166/multiprocessing-macos-osx-sierra-python3
+    https://groups.google.com/forum/#!searchin/pyglet-users/headless%7Csort:date/pyglet-users/p4Jz4g2QXKs/R1FmfW_9BgAJ
+
+    Trying to get pyglet to work when a screensaver kicks in.
+    """
+
+    subprocess.check_call(["mpirun", "-np", str(n), sys.executable] +['-u']+ sys.argv, env=env, shell=True)
     return "parent"
   else:
     global nworkers, rank
