@@ -46,7 +46,8 @@ def main(args):
                 # plt.imshow(observation)
                 # plt.show()
 
-                env.render()
+                if render:
+                    env.render()
                 done = False
                 action = env.action_space.sample()
                 t = 0
