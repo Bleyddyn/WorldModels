@@ -1,6 +1,6 @@
 import numpy as np
 
-from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Lambda, Reshape
+from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Lambda, Reshape, Cropping2D
 from keras.models import Model
 from keras import backend as K
 from keras.callbacks import EarlyStopping, TerminateOnNaN
@@ -14,7 +14,7 @@ DENSE_SIZE = 1024
 
 CONV_T_FILTERS = [64,64,32,3]
 CONV_T_KERNEL_SIZES = [5,5,6,6]
-CONV_T_STRIDES = [2,2,2,2]
+CONV_T_STRIDES = [2,2,2,4]
 CONV_T_ACTIVATIONS = ['relu','relu','relu','sigmoid']
 
 Z_DIM = 32
@@ -76,7 +76,8 @@ class VAE():
         vae_d3 = Conv2DTranspose(filters = CONV_T_FILTERS[2], kernel_size = CONV_T_KERNEL_SIZES[2] , strides = CONV_T_STRIDES[2], activation=CONV_T_ACTIVATIONS[2])
         vae_d3_model = vae_d3(vae_d2_model)
         vae_d4 = Conv2DTranspose(filters = CONV_T_FILTERS[3], kernel_size = CONV_T_KERNEL_SIZES[3] , strides = CONV_T_STRIDES[3], activation=CONV_T_ACTIVATIONS[3])
-        vae_d4_model = vae_d4(vae_d3_model)
+        crp4 = Cropping2D(1)
+        vae_d4_model = crp4(vae_d4(vae_d3_model))
 
         #### DECODER ONLY
 
@@ -86,7 +87,7 @@ class VAE():
         vae_d1_decoder = vae_d1(vae_z_out_decoder)
         vae_d2_decoder = vae_d2(vae_d1_decoder)
         vae_d3_decoder = vae_d3(vae_d2_decoder)
-        vae_d4_decoder = vae_d4(vae_d3_decoder)
+        vae_d4_decoder = Cropping2D(1)(vae_d4(vae_d3_decoder))
 
         #### MODELS
 
@@ -120,14 +121,14 @@ class VAE():
     def set_weights(self, filepath):
         self.model.load_weights(filepath)
 
-    def train(self, data, validation_split = 0.2):
+    def train(self, data, validation_split = 0.2, epochs=EPOCHS):
 
         earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=5, verbose=1, mode='auto')
         callbacks_list = [earlystop, TerminateOnNaN()]
 
         self.model.fit(data, data,
                 shuffle=True,
-                epochs=EPOCHS,
+                epochs=epochs,
                 batch_size=BATCH_SIZE,
                 validation_split=validation_split,
                 callbacks=callbacks_list)
@@ -154,4 +155,6 @@ class VAE():
         return (rnn_input, rnn_output)
     
 
-
+if __name__ == "__main__":
+    vae = VAE(input_dim=(120,120,3))
+    vae.model.summary()

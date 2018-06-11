@@ -38,7 +38,7 @@ def sample_data(args):
     plt.show()
 
 def sample_vae(args):
-    vae = VAE()
+    vae = VAE(input_dim=(120,120,3))
 
     try:
       vae.set_weights('./vae/weights.h5')

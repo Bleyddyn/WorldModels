@@ -7,7 +7,9 @@ import argparse
 
 import numpy as np
 
-from load_aux import loadAuxData
+from keras.utils import to_categorical
+
+#from load_aux import loadAuxData
 
 # For python2/3 compatibility when calling isinstance(x,basestring)
 # From: https://stackoverflow.com/questions/11301138/how-to-check-if-variable-is-string-with-python-2-and-3-compatibility
@@ -56,6 +58,7 @@ def loadOneDrive( drive_dir, size=(120,120) ):
         im_file = os.path.join( drive_dir, basename+".pickle" )
         with open(im_file,'r') as f:
             images = pickle.load(f)
+            images = np.array(images)
 
     return images, actions
 
@@ -115,6 +118,7 @@ def loadData( dirs, size=(120,120), image_norm=True ):
 
     categorical = True
     if isinstance(actions[0], basestring):
+        actions = np.array(actions)
         actions = actions.astype('str')
         actions = embedActions( actions )
         actions = to_categorical( actions, num_classes=5 )
@@ -197,3 +201,7 @@ if __name__ == "__main__":
     num_actions = len(y[0])
     num_samples = len(images)
 
+    print( "input_dim: {}".format( input_dim ) )
+    print( "Action space: {}".format( "Categorical" if cat else "Continuous" ) )
+    print( "num_actions: {}".format( num_actions ) )
+    print( "num_samples: {}".format( num_samples ) )
