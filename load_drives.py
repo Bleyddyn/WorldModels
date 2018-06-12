@@ -41,14 +41,17 @@ def embedActions( actions ):
             emb.append( prev_act )
     return emb
 
-def loadOneDrive( drive_dir, size=(120,120) ):
-    actions_file = os.path.join( drive_dir, "image_actions.npy" )
-    if os.path.exists(actions_file):
-        actions = np.load(actions_file)
+def loadOneDrive( drive_dir, size=(120,120), skip_actions=False ):
+    if skip_actions:
+        actions = None
     else:
-        actions_file = os.path.join( drive_dir, "image_actions.pickle" )
-        with open(actions_file,'r') as f:
-            actions = pickle.load(f)
+        actions_file = os.path.join( drive_dir, "image_actions.npy" )
+        if os.path.exists(actions_file):
+            actions = np.load(actions_file)
+        else:
+            actions_file = os.path.join( drive_dir, "image_actions.pickle" )
+            with open(actions_file,'r') as f:
+                actions = pickle.load(f)
 
     basename = "images_{}x{}".format( size[0], size[1] )
     im_file = os.path.join( drive_dir, basename+".npy" )
@@ -62,19 +65,21 @@ def loadOneDrive( drive_dir, size=(120,120) ):
 
     return images, actions
 
-def loadData( dirs, size=(120,120), image_norm=True ):
+def loadData( dirs, size=(120,120), image_norm=True, skip_actions=False ):
     images = []
     actions = []
 
     count = 1
     for onedir in dirs:
         if len(onedir) > 0:
-            dimages, dactions = loadOneDrive( onedir, size=size )
-            if dimages.shape[0] != dactions.shape[0]:
-                print( "Data mismatch in {}: {} != {}".format( onedir, dimages.shape[0], dactions.shape[0] ) )
+            dimages, dactions = loadOneDrive( onedir, size=size, skip_actions=skip_actions )
+            if not skip_actions:
+                if dimages.shape[0] != dactions.shape[0]:
+                    print( "Data mismatch in {}: {} != {}".format( onedir, dimages.shape[0], dactions.shape[0] ) )
             dimages = dimages.astype(np.float)
             images.extend(dimages)
-            actions.extend(dactions)
+            if not skip_actions:
+                actions.extend(dactions)
             print( "Loading {} of {}: {} total samples".format( count, len(dirs), len(images) ), end='\r' )
             sys.stdout.flush()
             count += 1
@@ -117,38 +122,22 @@ def loadData( dirs, size=(120,120), image_norm=True ):
 #        images[:,:,:,2] /= bstd
 
     categorical = True
-    if isinstance(actions[0], basestring):
-        actions = np.array(actions)
-        actions = actions.astype('str')
-        actions = embedActions( actions )
-        actions = to_categorical( actions, num_classes=5 )
-        categorical = True
-    elif type(actions) == list:
-        actions = np.array(actions)
-        categorical = False
-    else:
-        print("Unknown actions format: {} {} as {}".format( type(actions), actions[0], type(actions[0]) ))
+    if not skip_actions:
+        if isinstance(actions[0], basestring):
+            actions = np.array(actions)
+            actions = actions.astype('str')
+            actions = embedActions( actions )
+            actions = to_categorical( actions, num_classes=5 )
+            categorical = True
+        elif type(actions) == list:
+            actions = np.array(actions)
+            categorical = False
+        else:
+            print("Unknown actions format: {} {} as {}".format( type(actions), actions[0], type(actions[0]) ))
 
     return images, actions, categorical
 
 def runTests(args):
-    arr1 = hparamsToArray( {} )
-    print( "default hparams: {}".format( arr1 ) )
-    dict1 = hparamsToDict( arr1 )
-    arr2 = hparamsToArray( dict1 )
-    if arr1 == arr2:
-        print( "round trip worked" )
-    else:
-        print( "{}".format( arr2 ) )
-    dict1["dropouts"] = "up"
-    dropouts = [0.2,0.3,0.4,0.5,0.6]
-    res = hparamsToArray(dict1)
-    if dropouts == res[2]:
-        print( "Dropouts with 'up' worked" )
-    else:
-        print( "Dropouts with 'up' did NOT work" )
-    print( args.dirs )
-
     images, y, cat = loadData(args.dirs)
     print( "Images: {}".format( len(images) ) )
     print( "Actions: {}".format( len(y) ) )

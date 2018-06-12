@@ -1,7 +1,8 @@
 import numpy as np
 
-from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Lambda, Reshape, Cropping2D
+from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Lambda, Reshape, Cropping2D, Maximum
 from keras.models import Model
+from keras import optimizers
 from keras import backend as K
 from keras.callbacks import EarlyStopping, TerminateOnNaN
 
@@ -41,7 +42,8 @@ class VAE():
     def __init__(self, input_dim=(64,64,3), z_dim=32):
         self.input_dim = input_dim
         self.z_dim = z_dim
-
+        self.r_loss_const = 5.0
+        self.kl_tolerance = 0.5 # For setting a maximum on the kl_loss
         self.models = self._build()
         self.model = self.models[0]
         self.encoder = self.models[1]
@@ -103,17 +105,21 @@ class VAE():
             y_pred_flat = K.flatten(y_pred)
 
             #return (64*64*3) * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
-            return 0.5 * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
+            #return 0.5 * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
+            return self.r_loss_const * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
 
         def vae_kl_loss(y_true, y_pred):
-            x = - 0.5 * K.mean(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
-            #return K.clip(x, -1000.0, 100.0)
-            return x
+            #kl_loss = -0.5 * tf.reduce_sum(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), reduction_indices = 1)
+            #kl_loss = K.mean( K.maximum(kl_loss, self.kl_tolerance * self.z_dim) )
+            kl_loss = - 0.5 * K.mean(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
+            #return K.clip(kl_loss, -1000.0, 100.0)
+            return kl_loss
 
         def vae_loss(y_true, y_pred):
             return vae_r_loss(y_true, y_pred) + vae_kl_loss(y_true, y_pred)
             
-        vae.compile(optimizer='rmsprop', loss = vae_loss,  metrics = [vae_r_loss, vae_kl_loss])
+        optimizer = optimizers.RMSprop(lr=0.003, rho=0.9, epsilon=1e-08, decay=0.005)
+        vae.compile(optimizer=optimizer, loss = vae_loss,  metrics = [vae_r_loss, vae_kl_loss])
 
         return (vae,vae_encoder, vae_decoder)
 

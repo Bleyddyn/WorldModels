@@ -50,7 +50,7 @@ def main(args):
 
 def train_on_drives(args):
 
-    data, y, cat = loadData(args.dirs)
+    data, y, cat = loadData(args.dirs, skip_actions=True)
     input_dim = data[0].shape
     print( "Data shape: {}".format( data.shape ) )
 
