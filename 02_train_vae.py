@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 import config
 
-from load_drives import loadData
+from load_drives import loadData, loadDataBatches
 
 def main(args):
 
@@ -49,21 +49,23 @@ def main(args):
       print('no data found for batch number {}'.format(batch_num))
 
 def train_on_drives(args):
+    vae = None
 
-    data, y, cat = loadData(args.dirs, skip_actions=True)
-    input_dim = data[0].shape
-    print( "Data shape: {}".format( data.shape ) )
+    #data, y, cat = loadData(args.dirs, skip_actions=True)
+    for data, y, cat in loadDataBatches( args.dirs, skip_actions=True, max_batch=2000 ):
+        if vae is None:
+            input_dim = data[0].shape
+            print( "Data shape: {}".format( data.shape ) )
+            vae = VAE( input_dim=input_dim )
 
-    vae = VAE( input_dim=input_dim )
+            if not args.new_model:
+                try:
+                    vae.set_weights('./vae/weights.h5')
+                except:
+                    print("Either set --new_model or ensure ./vae/weights.h5 exists")
+                    raise
 
-    if not args.new_model:
-        try:
-            vae.set_weights('./vae/weights.h5')
-        except:
-            print("Either set --new_model or ensure ./vae/weights.h5 exists")
-            raise
-
-    vae.train(data, epochs=100)
+        vae.train(data, epochs=100)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('Train VAE'))

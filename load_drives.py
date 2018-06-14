@@ -63,32 +63,16 @@ def loadOneDrive( drive_dir, size=(120,120), skip_actions=False ):
             images = pickle.load(f)
             images = np.array(images)
 
+    images = images.astype(np.float)
+
+    if not skip_actions:
+        if images.shape[0] != actions.shape[0]:
+            print( "Data mismatch in {}: {} != {}".format( drive_dir, images.shape[0], actions.shape[0] ) )
+
     return images, actions
 
-def loadData( dirs, size=(120,120), image_norm=True, skip_actions=False ):
-    images = []
-    actions = []
-
-    count = 1
-    for onedir in dirs:
-        if len(onedir) > 0:
-            dimages, dactions = loadOneDrive( onedir, size=size, skip_actions=skip_actions )
-            if not skip_actions:
-                if dimages.shape[0] != dactions.shape[0]:
-                    print( "Data mismatch in {}: {} != {}".format( onedir, dimages.shape[0], dactions.shape[0] ) )
-            dimages = dimages.astype(np.float)
-            images.extend(dimages)
-            if not skip_actions:
-                actions.extend(dactions)
-            print( "Loading {} of {}: {} total samples".format( count, len(dirs), len(images) ), end='\r' )
-            sys.stdout.flush()
-            count += 1
-
-    print("")
-    images = np.array(images)
-    #images = images.astype(np.float) # / 255.0
-
-    if image_norm:
+def normalize_images( images, default=True ):
+    if default:
         rmean = 92.93206363205326
         gmean = 85.80540021330793
         bmean = 54.14884297660608
@@ -103,24 +87,25 @@ def loadData( dirs, size=(120,120), image_norm=True, skip_actions=False ):
         images[:,:,:,0] /= rstd
         images[:,:,:,1] /= gstd
         images[:,:,:,2] /= bstd
+    else:
+        rmean = np.mean(images[:,:,:,0])
+        gmean= np.mean(images[:,:,:,1])
+        bmean= np.mean(images[:,:,:,2])
+        rstd = np.std(images[:,:,:,0])
+        gstd = np.std(images[:,:,:,1])
+        bstd = np.std(images[:,:,:,2])
+        print( "Image means: {}/{}/{}".format( rmean, gmean, bmean ) )
+        print( "Image stds: {}/{}/{}".format( rstd, gstd, bstd ) )
 
-#        rmean = np.mean(images[:,:,:,0])
-#        gmean= np.mean(images[:,:,:,1])
-#        bmean= np.mean(images[:,:,:,2])
-#        rstd = np.std(images[:,:,:,0])
-#        gstd = np.std(images[:,:,:,1])
-#        bstd = np.std(images[:,:,:,2])
-#        print( "Image means: {}/{}/{}".format( rmean, gmean, bmean ) )
-#        print( "Image stds: {}/{}/{}".format( rstd, gstd, bstd ) )
-#
-## should only do this for the training data, not val/test, but I'm not sure how to do that when Keras makes the train/val split
-#        images[:,:,:,0] -= rmean
-#        images[:,:,:,1] -= gmean
-#        images[:,:,:,2] -= bmean
-#        images[:,:,:,0] /= rstd
-#        images[:,:,:,1] /= gstd
-#        images[:,:,:,2] /= bstd
+# should only do this for the training data, not val/test, but I'm not sure how to do that when Keras makes the train/val split
+        images[:,:,:,0] -= rmean
+        images[:,:,:,1] -= gmean
+        images[:,:,:,2] -= bmean
+        images[:,:,:,0] /= rstd
+        images[:,:,:,1] /= gstd
+        images[:,:,:,2] /= bstd
 
+def postproc_actions( actions ):
     categorical = True
     if not skip_actions:
         if isinstance(actions[0], basestring):
@@ -135,7 +120,61 @@ def loadData( dirs, size=(120,120), image_norm=True, skip_actions=False ):
         else:
             print("Unknown actions format: {} {} as {}".format( type(actions), actions[0], type(actions[0]) ))
 
+    return actions, categorical
+
+def loadData( dirs, size=(120,120), image_norm=True, skip_actions=False ):
+    images = []
+    actions = []
+
+    count = 1
+    for onedir in dirs:
+        if len(onedir) > 0:
+            dimages, dactions = loadOneDrive( onedir, size=size, skip_actions=skip_actions )
+            images.extend(dimages)
+            if not skip_actions:
+                actions.extend(dactions)
+            print( "Loading {} of {}: {} total samples".format( count, len(dirs), len(images) ), end='\r' )
+            sys.stdout.flush()
+            count += 1
+
+    print("")
+    images = np.array(images)
+
+    if image_norm:
+        normalize_images(images)
+
+    categorical = True
+    if not skip_actions:
+        actions, categorical = postproc_actions(actions)
+
     return images, actions, categorical
+
+def loadDataBatches( dirs, size=(120,120), image_norm=True, skip_actions=False, max_batch=20000 ):
+    images = []
+    actions = []
+
+    for idx, onedir in enumerate(dirs):
+        if len(onedir) > 0:
+            dimages, dactions = loadOneDrive( onedir, size=size, skip_actions=skip_actions )
+            images.extend(dimages)
+            if not skip_actions:
+                actions.extend(dactions)
+            print( "Loading {} of {}: {} total samples".format( idx+1, len(dirs), len(images) ), end='\r' )
+            sys.stdout.flush()
+            if len(images) > max_batch or idx == (len(dirs) - 1):
+                print("")
+                images = np.array(images)
+
+                if image_norm:
+                    normalize_images(images)
+
+                categorical = True
+                if not skip_actions:
+                    actions, categorical = postproc_actions(actions)
+
+                yield images, actions, categorical
+                images = []
+                actions = []
 
 def runTests(args):
     images, y, cat = loadData(args.dirs)
@@ -181,16 +220,34 @@ if __name__ == "__main__":
     if args.aux is not None:
         auxData, cat_aux = loadAuxData( args.dirs, args.aux )
 
-    images, y, cat = loadData(args.dirs)
+    skip_actions = True
+    images, y, cat = loadData(args.dirs, skip_actions=skip_actions)
 
     if args.aux is not None:
         y = auxData
         cat = cat_aux
     input_dim = images[0].shape
-    num_actions = len(y[0])
+    if skip_actions:
+        num_actions = 0
+    else:
+        num_actions = len(y[0])
     num_samples = len(images)
 
     print( "input_dim: {}".format( input_dim ) )
     print( "Action space: {}".format( "Categorical" if cat else "Continuous" ) )
     print( "num_actions: {}".format( num_actions ) )
     print( "num_samples: {}".format( num_samples ) )
+
+
+    print( "" )
+    for images, y, cat in loadDataBatches( args.dirs, skip_actions=skip_actions, max_batch=2000 ):
+        input_dim = images[0].shape
+        if skip_actions:
+            num_actions = 0
+        else:
+            num_actions = len(y[0])
+        num_samples = len(images)
+        print( "input_dim: {}".format( input_dim ) )
+        print( "Action space: {}".format( "Categorical" if cat else "Continuous" ) )
+        print( "num_actions: {}".format( num_actions ) )
+        print( "num_samples: {}".format( num_samples ) )
