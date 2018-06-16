@@ -7,7 +7,8 @@ import argparse
 
 import numpy as np
 
-from keras.utils import to_categorical
+from keras.utils import to_categorical, Sequence
+# https://keras.io/utils/#sequence
 
 #from load_aux import loadAuxData
 
@@ -175,6 +176,89 @@ def loadDataBatches( dirs, size=(120,120), image_norm=True, skip_actions=False, 
                 yield images, actions, categorical
                 images = []
                 actions = []
+
+class DriveGenerator(Sequence):
+    """Generates MaLPi drive data for Keras.
+        From: https://stanford.edu/~shervine/blog/keras-how-to-generate-data-on-the-fly.html"""
+    def __init__(self, drive_dirs, batch_size=32, shuffle=True):
+        """ Input a list of drive directories.
+            Pre-load each to count number of samples.
+            load one directory and use it to generate batches until we run out.
+            load the next directory, repeat
+            Re-shuffle on each epoch end
+        """
+        'Initialization'
+        self.dirs = drive_dirs
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.on_epoch_end()
+        self.count, self.counts = self.__count()
+        self.current_dir = None
+        self.current_data = None
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(self.count / self.batch_size))
+
+    def __getitem__(self, index):
+        sample = index * self.batch_size
+        for idx, count in enumerate(self.counts):
+            if sample > count:
+                continue
+            idir = self.dirs[idx]
+            if self.current_dir != idir:
+                images, y = loadOneDrive(idir, skip_actions=True)
+                self.current_data = images
+                self.current_dir = idir
+
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+
+        # Generate data
+        X, y = self.__data_generation(list_IDs_temp)
+
+        return X, y
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        if self.shuffle == True:
+            np.random.shuffle(self.dirs)
+
+    def __count(self):
+# image_actions should have the same count as images, but should be faster to load and count
+        count = 0
+        counts = []
+        for idx, drive_dir in enumerate(self.dirs):
+            actions_file = os.path.join( drive_dir, "image_actions.npy" )
+            if os.path.exists(actions_file):
+                actions = np.load(actions_file)
+            else:
+                actions_file = os.path.join( drive_dir, "image_actions.pickle" )
+                with open(actions_file,'r') as f:
+                    actions = pickle.load(f)
+            count += len(actions)
+            counts.append( count )
+        return count, counts
+
+    def __data_generation(self, list_IDs_temp):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.empty((self.batch_size, *self.dim, self.n_channels))
+        y = np.empty((self.batch_size), dtype=int)
+
+        # Generate data
+        for i, ID in enumerate(list_IDs_temp):
+            # Store sample
+            X[i,] = np.load('data/' + ID + '.npy')
+
+            # Store class
+            y[i] = self.labels[ID]
+
+        return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
 
 def runTests(args):
     images, y, cat = loadData(args.dirs)
