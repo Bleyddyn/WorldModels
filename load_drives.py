@@ -180,7 +180,7 @@ def loadDataBatches( dirs, size=(120,120), image_norm=True, skip_actions=False, 
 class DriveGenerator(Sequence):
     """Generates MaLPi drive data for Keras.
         From: https://stanford.edu/~shervine/blog/keras-how-to-generate-data-on-the-fly.html"""
-    def __init__(self, drive_dirs, batch_size=32, shuffle=True):
+    def __init__(self, drive_dirs, input_dim=(120,120,3), batch_size=32, shuffle=True, max_load=10000, skip_actions=True, image_norm=True):
         """ Input a list of drive directories.
             Pre-load each to count number of samples.
             load one directory and use it to generate batches until we run out.
@@ -189,44 +189,81 @@ class DriveGenerator(Sequence):
         """
         'Initialization'
         self.dirs = drive_dirs
+        self.input_dim = input_dim
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.max_load = max_load
+        self.next_dir_index = 0
+        self.skip_actions = skip_actions
+        self.image_norm = image_norm
+        self.images = []
+        self.current_start = 0
         self.on_epoch_end()
         self.count, self.counts = self.__count()
-        self.current_dir = None
-        self.current_data = None
 
     def __len__(self):
         'Denotes the number of batches per epoch'
         return int(np.floor(self.count / self.batch_size))
 
     def __getitem__(self, index):
-        sample = index * self.batch_size
-        for idx, count in enumerate(self.counts):
-            if sample > count:
-                continue
-            idir = self.dirs[idx]
-            if self.current_dir != idir:
-                images, y = loadOneDrive(idir, skip_actions=True)
-                self.current_data = images
-                self.current_dir = idir
+        sample_beg = index * self.batch_size
+        sample_beg -= self.current_start
+        sample_end = sample_beg + self.batch_size
+        print( "getitem {} {}:{}".format( index, sample_beg, sample_end ) )
 
-        'Generate one batch of data'
-        # Generate indexes of the batch
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+        if sample_end <= len(self.images):
+            images = self.images[sample_beg:sample_end]
+            actions = self.actions[sample_beg:sample_end]
+            return images, actions
 
-        # Find list of IDs
-        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+        if sample_beg <= len(self.images):
+            images = self.images[sample_beg:]
+            actions = self.actions[sample_beg:]
+            sample_end = len(self.images) - sample_beg
+            self.images, self.actions = self.__load_next_max()
+            i2 = self.images[0:sample_end]
+            a2 = self.actions[0:sample_end]
+            images = np.append(images,i2,axis=0)
+            actions = np.append(actions,a2,axis=0)
+            return images, actions
 
-        # Generate data
-        X, y = self.__data_generation(list_IDs_temp)
+    def __load_next_max(self):
 
-        return X, y
+        self.current_start += len(self.images)
+
+        images = []
+        actions = []
+
+        while len(images) <= self.max_load and self.next_dir_index < len(self.dirs):
+            dimages, dactions = loadOneDrive( self.dirs[self.next_dir_index], size=self.input_dim, skip_actions=self.skip_actions )
+            if self.shuffle == True:
+                np.random.shuffle(dimages)
+# Need to do something about shuffling actions the same as images
+# From: https://stackoverflow.com/questions/4601373/better-way-to-shuffle-two-numpy-arrays-in-unison
+#X = np.array([[1., 0.], [2., 1.], [0., 0.]])
+#y = np.array([0, 1, 2])
+#from sklearn.utils import shuffle
+#X, y = shuffle(X, y, random_state=0)
+            images.extend(dimages)
+            if not self.skip_actions:
+                actions.extend(dactions)
+            self.next_dir_index += 1
+
+        images = np.array(images)
+
+        if self.image_norm:
+            normalize_images(images)
+
+        if not self.skip_actions:
+            actions, categorical = postproc_actions(actions)
+
+        return images, actions
 
     def on_epoch_end(self):
         'Updates indexes after each epoch'
         if self.shuffle == True:
             np.random.shuffle(self.dirs)
+        self.images, self.actions = self.__load_next_max()
 
     def __count(self):
 # image_actions should have the same count as images, but should be faster to load and count
@@ -305,33 +342,46 @@ if __name__ == "__main__":
         auxData, cat_aux = loadAuxData( args.dirs, args.aux )
 
     skip_actions = True
-    images, y, cat = loadData(args.dirs, skip_actions=skip_actions)
 
-    if args.aux is not None:
-        y = auxData
-        cat = cat_aux
-    input_dim = images[0].shape
-    if skip_actions:
-        num_actions = 0
-    else:
-        num_actions = len(y[0])
-    num_samples = len(images)
+    if False:
+        images, y, cat = loadData(args.dirs, skip_actions=skip_actions)
 
-    print( "input_dim: {}".format( input_dim ) )
-    print( "Action space: {}".format( "Categorical" if cat else "Continuous" ) )
-    print( "num_actions: {}".format( num_actions ) )
-    print( "num_samples: {}".format( num_samples ) )
-
-
-    print( "" )
-    for images, y, cat in loadDataBatches( args.dirs, skip_actions=skip_actions, max_batch=2000 ):
+        if args.aux is not None:
+            y = auxData
+            cat = cat_aux
         input_dim = images[0].shape
         if skip_actions:
             num_actions = 0
         else:
             num_actions = len(y[0])
         num_samples = len(images)
+
         print( "input_dim: {}".format( input_dim ) )
         print( "Action space: {}".format( "Categorical" if cat else "Continuous" ) )
         print( "num_actions: {}".format( num_actions ) )
         print( "num_samples: {}".format( num_samples ) )
+
+
+    if False:
+        print( "" )
+        for images, y, cat in loadDataBatches( args.dirs, skip_actions=skip_actions, max_batch=2000 ):
+            input_dim = images[0].shape
+            if skip_actions:
+                num_actions = 0
+            else:
+                num_actions = len(y[0])
+            num_samples = len(images)
+            print( "input_dim: {}".format( input_dim ) )
+            print( "Action space: {}".format( "Categorical" if cat else "Continuous" ) )
+            print( "num_actions: {}".format( num_actions ) )
+            print( "num_samples: {}".format( num_samples ) )
+
+    gen = DriveGenerator(args.dirs, input_dim=(120,120,3), batch_size=32, shuffle=True, max_load=2000, skip_actions=True)
+    print( "# samples: {}".format( gen.count ) )
+    print( "# batches: {}".format( len(gen) ) )
+    bnum = 1
+    for images, y in gen:
+        print( "Batch {}".format( bnum ), end='\r' )
+        sys.stdout.flush()
+        bnum += 1
+    print("")

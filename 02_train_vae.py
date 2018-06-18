@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 import config
 
-from load_drives import loadData, loadDataBatches
+from load_drives import loadData, loadDataBatches, DriveGenerator
 
 def main(args):
 
@@ -51,8 +51,7 @@ def main(args):
 def train_on_drives(args):
     vae = None
 
-    #data, y, cat = loadData(args.dirs, skip_actions=True)
-    for data, y, cat in loadDataBatches( args.dirs, skip_actions=True, max_batch=2000 ):
+    for data, y, cat in loadDataBatches( args.dirs, skip_actions=True, max_batch=10000 ):
         if vae is None:
             input_dim = data[0].shape
             print( "Data shape: {}".format( data.shape ) )
@@ -67,6 +66,21 @@ def train_on_drives(args):
 
         vae.train(data, epochs=100)
 
+def train_on_drives_gen(args):
+    input_dim=(120,120,3)
+    gen = DriveGenerator(args.dirs, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True)
+    val = DriveGenerator(args.val, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True)
+    vae = VAE( input_dim=input_dim )
+
+    if not args.new_model:
+        try:
+            vae.set_weights('./vae/weights.h5')
+        except:
+            print("Either set --new_model or ensure ./vae/weights.h5 exists")
+            raise
+
+    vae.train(data, val, epochs=100)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('Train VAE'))
     parser.add_argument('--start_batch', type=int, default = 0, help='The start batch number')
@@ -74,6 +88,8 @@ if __name__ == "__main__":
     parser.add_argument('--new_model', action='store_true', help='start a new model from scratch?')
     parser.add_argument('dirs', nargs='*', metavar="Directory", help='A directory containing recorded robot data')
     parser.add_argument('-f', '--file', help='File with one drive data directory per line')
+    parser.add_argument('--val', help='File with one drive data directory per line for validation')
+    parser.add_argument('--val_split', type=float, default=0.2, help='Percent validation split')
 
     args = parser.parse_args()
 
@@ -93,7 +109,18 @@ if __name__ == "__main__":
         elif len(args.dirs[i]) == 0:
             del args.dirs[i]
 
+    if args.val is not None:
+        with open(args.val, "r") as f:
+            tmp_dirs = f.read().split('\n')
+            args.val = tmp_dirs
+        for i in reversed(range(len(args.val))):
+            if args.val[i].startswith("#"):
+                del args.val[i]
+            elif len(args.val[i]) == 0:
+                del args.val[i]
+
     if len(args.dirs) > 0:
-        train_on_drives(args)
+        #train_on_drives(args)
+        train_on_drives_gen(args)
     else:
         main(args)
