@@ -79,7 +79,7 @@ def train_on_drives_gen(args):
             print("Either set --new_model or ensure ./vae/weights.h5 exists")
             raise
 
-    vae.train(data, val, epochs=100)
+    vae.train_gen(gen, val, epochs=100)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('Train VAE'))
@@ -118,6 +118,15 @@ if __name__ == "__main__":
                 del args.val[i]
             elif len(args.val[i]) == 0:
                 del args.val[i]
+    else:
+        last = int(len(args.dirs) * args.val_split)
+        np.random.shuffle(args.dirs)
+        test = args.dirs[:last]
+        train = args.dirs[last:]
+        args.dirs = train
+        args.val = test
+        #print( "Train:\n{}".format( args.dirs ) )
+        #print( "Test:\n{}".format( args.val ) )
 
     if len(args.dirs) > 0:
         #train_on_drives(args)

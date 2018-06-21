@@ -81,7 +81,7 @@ def normalize_images( images, default=True ):
         gstd = 53.739380109203445
         bstd = 47.66536771313241
 
-        print( "Default normalization" )
+        #print( "Default normalization" )
         images[:,:,:,0] -= rmean
         images[:,:,:,1] -= gmean
         images[:,:,:,2] -= bmean
@@ -209,12 +209,12 @@ class DriveGenerator(Sequence):
         sample_beg = index * self.batch_size
         sample_beg -= self.current_start
         sample_end = sample_beg + self.batch_size
-        print( "getitem {} {}:{}".format( index, sample_beg, sample_end ) )
+        #print( "getitem {} {}:{}".format( index, sample_beg, sample_end ) )
 
         if sample_end <= len(self.images):
             images = self.images[sample_beg:sample_end]
             actions = self.actions[sample_beg:sample_end]
-            return images, actions
+            return images, images
 
         if sample_beg <= len(self.images):
             images = self.images[sample_beg:]
@@ -225,7 +225,7 @@ class DriveGenerator(Sequence):
             a2 = self.actions[0:sample_end]
             images = np.append(images,i2,axis=0)
             actions = np.append(actions,a2,axis=0)
-            return images, actions
+            return images, images
 
     def __load_next_max(self):
 
@@ -263,6 +263,8 @@ class DriveGenerator(Sequence):
         'Updates indexes after each epoch'
         if self.shuffle == True:
             np.random.shuffle(self.dirs)
+        self.next_dir_index = 0
+        self.current_start = 0
         self.images, self.actions = self.__load_next_max()
 
     def __count(self):

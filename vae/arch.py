@@ -141,7 +141,7 @@ class VAE():
         
         self.model.save_weights('./vae/weights.h5')
 
-    def train_gen(self, generator, val_gen=None, validation_split = 0.2, epochs=EPOCHS):
+    def train_gen(self, generator, val_gen, epochs=EPOCHS):
 
         earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=5, verbose=1, mode='auto')
         callbacks_list = [earlystop, TerminateOnNaN()]
