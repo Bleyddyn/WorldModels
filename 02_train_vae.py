@@ -68,9 +68,11 @@ def train_on_drives(args):
 
 def train_on_drives_gen(args):
     input_dim=(120,120,3)
-    gen = DriveGenerator(args.dirs, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True)
-    val = DriveGenerator(args.val, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True)
+    gen = DriveGenerator(args.dirs, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True, image_norm=True)
+    val = DriveGenerator(args.val, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True, image_norm=True)
     vae = VAE( input_dim=input_dim )
+    print( "Train: {}".format( gen.count ) )
+    print( "Test : {}".format( val.count ) )
 
     if not args.new_model:
         try:

@@ -1,5 +1,6 @@
 import numpy as np
 
+import tensorflow as tf
 from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Lambda, Reshape, Cropping2D, Maximum
 from keras.models import Model
 from keras import optimizers
@@ -111,8 +112,8 @@ class VAE():
         def vae_kl_loss(y_true, y_pred):
             #kl_loss = -0.5 * tf.reduce_sum(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), reduction_indices = 1)
             #kl_loss = K.mean( K.maximum(kl_loss, self.kl_tolerance * self.z_dim) )
-            kl_loss = - 0.5 * K.mean(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
-            #return K.clip(kl_loss, -1000.0, 100.0)
+            kl_loss = K.mean(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
+            kl_loss = -0.5 * K.clip(kl_loss, self.kl_tolerance * self.z_dim, 100.0)
             return kl_loss
 
         def vae_loss(y_true, y_pred):
