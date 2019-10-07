@@ -67,6 +67,21 @@ def random_batch(filelist, batch_size):
 
 	return z_list, action_list, rew_list, done_list
 
+def load_data(fname='./data/rnn_data.npy'):
+
+    data = np.load(fname)
+    # print( "Data shape: {}".format( data.shape ) )
+    # Data shape: (43212, 131)
+    # time, angle, throttle, z
+    # record = np.insert( z, 0, [rtime, angle, throttle])
+    # Ignoring time for now, will need to use it to not try to learn across time gaps
+
+    rnn_input = data[1:, 1:]
+    rnn_output = data[:-1, 3:]
+    print( "RNN Input : {}".format( rnn_input.shape ) )
+    print( "RNN Output: {}".format( rnn_output.shape ) )
+    return rnn_input, rnn_output
+
 def main(args):
 	
 	new_model = args.new_model
@@ -74,7 +89,7 @@ def main(args):
 	steps = int(args.steps)
 	batch_size = int(args.batch_size)
 
-	rnn = RNN() #learning_rate = LEARNING_RATE
+    rnn = RNN( z_dim=128, action_dim=2)
 
 	if not new_model:
 		try:
@@ -83,9 +98,8 @@ def main(args):
 			print("Either set --new_model or ensure ./rnn/weights.h5 exists")
 			raise
 
-
-	filelist, N = get_filelist(N)
-
+    print( "Loading data..." )
+    rnn_input, rnn_output = load_data()
 
 	for step in range(steps):
 		print('STEP ' + str(step))
@@ -101,13 +115,9 @@ def main(args):
 		rnn.train(rnn_input, rnn_output)
 
 		if step % 10 == 0:
-
 			rnn.model.save_weights('./rnn/weights.h5')
 
 	rnn.model.save_weights('./rnn/weights.h5')
-
-
-
 
 if __name__ == "__main__":
 		parser = argparse.ArgumentParser(description=('Train RNN'))

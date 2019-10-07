@@ -16,7 +16,7 @@ DENSE_SIZE = 1024
 
 CONV_T_FILTERS = [64,64,32,3]
 CONV_T_KERNEL_SIZES = [5,5,6,6]
-CONV_T_STRIDES = [2,2,2,4]
+CONV_T_STRIDES = [2,2,2,2]
 CONV_T_ACTIVATIONS = ['relu','relu','relu','sigmoid']
 
 Z_DIM = 32
@@ -44,7 +44,7 @@ class VAE():
     def __init__(self, input_dim=(64,64,3), z_dim=32):
         self.input_dim = input_dim
         self.z_dim = z_dim
-        self.r_loss_const = 5.0
+        self.r_loss_const = 1.0
         self.kl_tolerance = 0.5 # For setting a maximum on the kl_loss
         self.models = self._build()
         self.full_model = self.models[0]
@@ -144,3 +144,24 @@ class VAE():
         
     def save_weights(self, filepath):
         self.full_model.save_weights(filepath)
+
+    def generate_rnn_data(self, obs_data, action_data):
+
+        rnn_input = []
+        rnn_output = []
+
+        for i, j in zip(obs_data, action_data):    
+            rnn_z_input = self.encoder.predict(np.array(i))
+            conc = [np.concatenate([x,y]) for x, y in zip(rnn_z_input, j)]
+            rnn_input.append(conc[:-1])
+            rnn_output.append(np.array(rnn_z_input[1:]))
+
+        rnn_input = np.array(rnn_input)
+        rnn_output = np.array(rnn_output)
+
+        return (rnn_input, rnn_output)
+    
+
+if __name__ == "__main__":
+    vae = VAE(input_dim=(64,64,3))
+    vae.model.summary()

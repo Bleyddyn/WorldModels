@@ -49,7 +49,8 @@ def import_data(N):
 
 
 
-from load_drives import loadData, loadDataBatches, DriveGenerator
+from load_drives import DriveDataGenerator
+from malpiOptions import addMalpiOptions, preprocessOptions
 
 def main(args):
 
@@ -98,12 +99,13 @@ def train_on_drives(args):
         vae.train(data, epochs=100)
 
 def train_on_drives_gen(args):
-    input_dim=(120,120,3)
-    gen = DriveGenerator(args.dirs, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True, image_norm=True)
-    val = DriveGenerator(args.val, input_dim=input_dim, batch_size=32, shuffle=True, max_load=10000, skip_actions=True, image_norm=True)
+    input_dim=(64,64,3)
+
+    gen = DriveDataGenerator(args.dirs, image_size=input_dim[0:2], batch_size=100, shuffle=True, max_load=10000, images_only=True)
+    val = DriveDataGenerator(args.val, image_size=input_dim[0:2], batch_size=100, shuffle=True, max_load=10000, images_only=True)
     vae = VAE( input_dim=input_dim )
     print( "Train: {}".format( gen.count ) )
-    print( "Test : {}".format( val.count ) )
+    print( "Val  : {}".format( val.count ) )
 
     if not args.new_model:
         try:
@@ -127,47 +129,30 @@ if __name__ == "__main__":
     parser.add_argument('--N',default = 10000, help='number of episodes to use to train')
     parser.add_argument('--new_model', action='store_true', help='start a new model from scratch?')
     parser.add_argument('--epochs', default = 10, help='number of epochs to train for')
+    parser.add_argument('--val', help='File with one drive data directory per line for validation')
+    parser.add_argument('--val_split', type=float, default=0.2, help='Percent validation split')
+
+    addMalpiOptions( parser )
     args = parser.parse_args()
+    preprocessOptions(args)
 
-    main(args)
+    if len(args.dirs) == 0 and not (args.test_only or args.start_batch):
+        parser.print_help()
+        print( "\nNo directories supplied" )
+        exit()
 
-#    if args.file is not None:
-#        with open(args.file, "r") as f:
-#            tmp_dirs = f.read().split('\n')
-#            args.dirs.extend(tmp_dirs)
-#
-#    if len(args.dirs) == 0 and not (args.test_only or args.start_batch):
-#        parser.print_help()
-#        print( "\nNo directories supplied" )
-#        exit()
-#
-#    for i in reversed(range(len(args.dirs))):
-#        if args.dirs[i].startswith("#"):
-#            del args.dirs[i]
-#        elif len(args.dirs[i]) == 0:
-#            del args.dirs[i]
-#
-#    if args.val is not None:
-#        with open(args.val, "r") as f:
-#            tmp_dirs = f.read().split('\n')
-#            args.val = tmp_dirs
-#        for i in reversed(range(len(args.val))):
-#            if args.val[i].startswith("#"):
-#                del args.val[i]
-#            elif len(args.val[i]) == 0:
-#                del args.val[i]
-#    else:
-#        last = int(len(args.dirs) * args.val_split)
-#        np.random.shuffle(args.dirs)
-#        test = args.dirs[:last]
-#        train = args.dirs[last:]
-#        args.dirs = train
-#        args.val = test
-#        #print( "Train:\n{}".format( args.dirs ) )
-#        #print( "Test:\n{}".format( args.val ) )
-#
-#    if len(args.dirs) > 0:
-#        #train_on_drives(args)
-#        train_on_drives_gen(args)
-#    else:
-#        main(args)
+    if args.val is None:
+        last = int(len(args.dirs) * args.val_split)
+        np.random.shuffle(args.dirs)
+        test = args.dirs[:last]
+        train = args.dirs[last:]
+        args.dirs = train
+        args.val = test
+        #print( "Train:\n{}".format( args.dirs ) )
+        #print( "Test:\n{}".format( args.val ) )
+
+    if len(args.dirs) > 0:
+        #train_on_drives(args)
+        train_on_drives_gen(args)
+    else:
+        main(args)
