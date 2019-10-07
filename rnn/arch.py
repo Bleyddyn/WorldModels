@@ -6,29 +6,23 @@ from keras.models import Model
 from keras import backend as K
 from keras.callbacks import EarlyStopping
 
-Z_DIM = 32
-ACTION_DIM = 3
-
-HIDDEN_UNITS = 256
-GAUSSIAN_MIXTURES = 5
-
 BATCH_SIZE =32
 EPOCHS = 20
 
-def get_mixture_coef(y_pred):
+def get_mixture_coef(y_pred, gaussian_mixtures, z_dim):
     
-    d = GAUSSIAN_MIXTURES * Z_DIM
+    d = gaussian_mixtures * z_dim
     
     rollout_length = K.shape(y_pred)[1]
     
     pi = y_pred[:,:,:d]
     mu = y_pred[:,:,d:(2*d)]
     log_sigma = y_pred[:,:,(2*d):(3*d)]
-    #discrete = y_pred[:,3*GAUSSIAN_MIXTURES:]
+    #discrete = y_pred[:,3*gaussian_mixtures:]
     
-    pi = K.reshape(pi, [-1, rollout_length, GAUSSIAN_MIXTURES, Z_DIM])
-    mu = K.reshape(mu, [-1, rollout_length, GAUSSIAN_MIXTURES, Z_DIM])
-    log_sigma = K.reshape(log_sigma, [-1, rollout_length, GAUSSIAN_MIXTURES, Z_DIM])
+    pi = K.reshape(pi, [-1, rollout_length, gaussian_mixtures, z_dim])
+    mu = K.reshape(mu, [-1, rollout_length, gaussian_mixtures, z_dim])
+    log_sigma = K.reshape(log_sigma, [-1, rollout_length, gaussian_mixtures, z_dim])
 
     pi = K.exp(pi) / K.sum(K.exp(pi), axis=2, keepdims=True)
     sigma = K.exp(log_sigma)
@@ -36,11 +30,11 @@ def get_mixture_coef(y_pred):
     return pi, mu, sigma#, discrete
 
 
-def tf_normal(y_true, mu, sigma, pi):
+def tf_normal(y_true, mu, sigma, pi, gaussian_mixtures, z_dim):
 
     rollout_length = K.shape(y_true)[1]
-    y_true = K.tile(y_true,(1,1,GAUSSIAN_MIXTURES))
-    y_true = K.reshape(y_true, [-1, rollout_length, GAUSSIAN_MIXTURES,Z_DIM])
+    y_true = K.tile(y_true,(1,1,gaussian_mixtures))
+    y_true = K.reshape(y_true, [-1, rollout_length, gaussian_mixtures,z_dim])
 
     oneDivSqrtTwoPI = 1 / math.sqrt(2*math.pi)
     result = y_true - mu
@@ -55,29 +49,31 @@ def tf_normal(y_true, mu, sigma, pi):
 
 
 class RNN():
-    def __init__(self):
+    def __init__(self, z_dim, action_dim, hidden_units=256, gaussian_mixtures=5):
+        self.z_dim = z_dim
+        self.action_dim = action_dim
+        self.hidden_units = hidden_units
+        self.gaussian_mixtures = gaussian_mixtures
+
         self.models = self._build()
         self.model = self.models[0]
+        self.model.summary()
         self.forward = self.models[1]
-        self.z_dim = Z_DIM
-        self.action_dim = ACTION_DIM
-        self.hidden_units = HIDDEN_UNITS
-        self.gaussian_mixtures = GAUSSIAN_MIXTURES
 
     def _build(self):
 
         #### THE MODEL THAT WILL BE TRAINED
-        rnn_x = Input(shape=(None, Z_DIM + ACTION_DIM))
-        lstm = LSTM(HIDDEN_UNITS, return_sequences=True, return_state = True)
+        rnn_x = Input(shape=(None, self.z_dim + self.action_dim))
+        lstm = LSTM(self.hidden_units, return_sequences=True, return_state = True)
 
         lstm_output, _ , _ = lstm(rnn_x)
-        mdn = Dense(GAUSSIAN_MIXTURES * (3*Z_DIM))(lstm_output) #+ discrete_dim
+        mdn = Dense(self.gaussian_mixtures * (3*self.z_dim))(lstm_output) #+ discrete_dim
 
         rnn = Model(rnn_x, mdn)
 
         #### THE MODEL USED DURING PREDICTION
-        state_input_h = Input(shape=(HIDDEN_UNITS,))
-        state_input_c = Input(shape=(HIDDEN_UNITS,))
+        state_input_h = Input(shape=(self.hidden_units,))
+        state_input_c = Input(shape=(self.hidden_units,))
         state_inputs = [state_input_h, state_input_c]
         _ , state_h, state_c = lstm(rnn_x, initial_state = [state_input_h, state_input_c])
 
@@ -85,27 +81,33 @@ class RNN():
 
         #### LOSS FUNCTION
 
-        def rnn_r_loss(y_true, y_pred):
+        def make_rnn_r_loss( gmix, z_dim ):
+            def rnn_r_loss(y_true, y_pred):
 
-            pi, mu, sigma = get_mixture_coef(y_pred)
-        
-            result = tf_normal(y_true, mu, sigma, pi)
+                pi, mu, sigma = get_mixture_coef(y_pred, gmix, z_dim)
             
-            result = -K.log(result + 1e-8)
-            result = K.mean(result, axis = (1,2)) # mean over rollout length and z dim
+                result = tf_normal(y_true, mu, sigma, pi, gmix, z_dim)
+                
+                result = -K.log(result + 1e-8)
+                result = K.mean(result, axis = (1,2)) # mean over rollout length and z dim
 
-            return result
-    
-        def rnn_kl_loss(y_true, y_pred):
-            pi, mu, sigma = get_mixture_coef(y_pred)
-            kl_loss = - 0.5 * K.mean(1 + K.log(K.square(sigma)) - K.square(mu) - K.square(sigma), axis = [1,2,3])
-            return kl_loss
+                return result
+            return rnn_r_loss
+        r_loss = make_rnn_r_loss( self.gaussian_mixtures, self.z_dim )
+
+        def make_rnn_kl_loss( gmix, z_dim ):
+            def rnn_kl_loss(y_true, y_pred):
+                pi, mu, sigma = get_mixture_coef(y_pred, gmix, z_dim)
+                kl_loss = - 0.5 * K.mean(1 + K.log(K.square(sigma)) - K.square(mu) - K.square(sigma), axis = [1,2,3])
+                return kl_loss
+            return rnn_kl_loss
+        kl_loss = make_rnn_kl_loss( self.gaussian_mixtures, self.z_dim )
 
         def rnn_loss(y_true, y_pred):
-            return rnn_r_loss(y_true, y_pred) #+ rnn_kl_loss(y_true, y_pred)
+            return r_loss(y_true, y_pred) #+ rnn_kl_loss(y_true, y_pred)
 
 
-        rnn.compile(loss=rnn_loss, optimizer='rmsprop', metrics = [rnn_r_loss, rnn_kl_loss])
+        rnn.compile(loss=rnn_loss, optimizer='rmsprop', metrics = [r_loss, kl_loss])
 
         return (rnn,forward)
 

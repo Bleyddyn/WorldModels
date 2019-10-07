@@ -16,7 +16,7 @@ DENSE_SIZE = 1024
 
 CONV_T_FILTERS = [64,64,32,3]
 CONV_T_KERNEL_SIZES = [5,5,6,6]
-CONV_T_STRIDES = [2,2,2,4]
+CONV_T_STRIDES = [2,2,2,2]
 CONV_T_ACTIVATIONS = ['relu','relu','relu','sigmoid']
 
 Z_DIM = 32
@@ -43,7 +43,7 @@ class VAE():
     def __init__(self, input_dim=(64,64,3), z_dim=32):
         self.input_dim = input_dim
         self.z_dim = z_dim
-        self.r_loss_const = 5.0
+        self.r_loss_const = 1.0
         self.kl_tolerance = 0.5 # For setting a maximum on the kl_loss
         self.models = self._build()
         self.model = self.models[0]
@@ -51,6 +51,7 @@ class VAE():
         self.decoder = self.models[2]
 
     def _build(self):
+
         vae_x = Input(shape=self.input_dim)
         vae_c1 = Conv2D(filters = CONV_FILTERS[0], kernel_size = CONV_KERNEL_SIZES[0], strides = CONV_STRIDES[0], activation=CONV_ACTIVATIONS[0])(vae_x)
         vae_c2 = Conv2D(filters = CONV_FILTERS[1], kernel_size = CONV_KERNEL_SIZES[1], strides = CONV_STRIDES[1], activation=CONV_ACTIVATIONS[0])(vae_c1)
@@ -79,8 +80,9 @@ class VAE():
         vae_d3 = Conv2DTranspose(filters = CONV_T_FILTERS[2], kernel_size = CONV_T_KERNEL_SIZES[2] , strides = CONV_T_STRIDES[2], activation=CONV_T_ACTIVATIONS[2])
         vae_d3_model = vae_d3(vae_d2_model)
         vae_d4 = Conv2DTranspose(filters = CONV_T_FILTERS[3], kernel_size = CONV_T_KERNEL_SIZES[3] , strides = CONV_T_STRIDES[3], activation=CONV_T_ACTIVATIONS[3])
-        crp4 = Cropping2D(1)
-        vae_d4_model = crp4(vae_d4(vae_d3_model))
+        vae_d4_model = vae_d4(vae_d3_model)
+        #crp4 = Cropping2D(1)
+        #vae_d4_model = crp4(vae_d4(vae_d3_model))
 
         #### DECODER ONLY
 
@@ -110,10 +112,12 @@ class VAE():
             return self.r_loss_const * K.mean(K.square(y_true_flat - y_pred_flat), axis = -1)
 
         def vae_kl_loss(y_true, y_pred):
+            #return - 0.5 * K.mean(1 + vae_z_log_var - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
+
             #kl_loss = -0.5 * tf.reduce_sum(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), reduction_indices = 1)
             #kl_loss = K.mean( K.maximum(kl_loss, self.kl_tolerance * self.z_dim) )
             kl_loss = K.mean(1 + (vae_z_log_var) - K.square(vae_z_mean) - K.exp(vae_z_log_var), axis = -1)
-            kl_loss = -0.5 * K.clip(kl_loss, self.kl_tolerance * self.z_dim, 100.0)
+            kl_loss = -0.5 * K.clip(kl_loss, 0.0, self.kl_tolerance * self.z_dim)
             return kl_loss
 
         def vae_loss(y_true, y_pred):
@@ -172,5 +176,5 @@ class VAE():
     
 
 if __name__ == "__main__":
-    vae = VAE(input_dim=(120,120,3))
+    vae = VAE(input_dim=(64,64,3))
     vae.model.summary()
